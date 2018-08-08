@@ -18,20 +18,24 @@ after file encryption. The ptrtar archives themselves can be and compressed encr
 walkthrough:
 
 ```
-# consider the example scripts, uploadencryptedtoS3 and downloadencryptedfromS3
+# consider the example scripts, uploadencryptedtogoogle and downloadencryptedfromgoogle
 # upload reads the file contents from stdin. encrypts it, uploads the data
 # and prints a url to stdout.
-echo hello | ./examples/uploadtoS3
-$ s3://somebucket/someobject
+
+gpgid=ac@acha.ninja
+bucket=gs://mytopsecretbucket/
+
+$ echo hello | ./example/uploadencryptedtogoogle.sh $bucket $gpgid
+gs://mytopsecretbucket/f572d396fae9206628714fb2ce00f72e94f2258f
 
 # download takes a url from stdin, decrypts it, and prints the file contents.
-$ echo s3://somebucket/someobject | ./examples/downloadfromS3
+$ echo gs://mytopsecretbucket/f572d396fae9206628714fb2ce00f72e94f2258f | ./example/downloadfromgoogle.sh
 hello
 
 # now combining it with ptrtar create, we can encrypt our files them and upload
-# them to s3.
+# them to google.
 
-ptrtar create -dir DIR ./uploadencryptedtoS3 > files.ptrtar
+ptrtar create -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > files.ptrtar
 
 # its a bit slow though, that sucks.
 # we can use a cache file, that remembers the url of files we uploaded, 
@@ -39,11 +43,11 @@ ptrtar create -dir DIR ./uploadencryptedtoS3 > files.ptrtar
 # so future archives don't need to reupload if the file didn't change.
 
 # first backup is slow.
-$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./uploadencryptedtoS3 | gzip > backup1.ptrtar.gz
+$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid | gzip > backup1.ptrtar.gz
 
 # second backup is hella fast, hell yeah!
 # only new files and changed files are reencrypted and uploaded
-$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./uploadencryptedtoS3 > gzip > backup1.ptrtar.gz
+$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > gzip > backup1.ptrtar.gz
 
 # if we want to to see what pointers, or in this case, s3 urls a ptrtar contains
 # just run list-ptrs
@@ -55,7 +59,7 @@ diff <(gunzip < backup1.ptrtar.gz | ptrtar list-ptrs) <(gunzip < backup2.ptrtar.
 
 # lets convert our ptr tar back to a regular tar file so we 
 # can extract it.
-ptrtar to-tar ./downloadencryptedfromS3 < backup1.ptrtar > files.tar
+ptrtar to-tar ./example/downloadencryptedfromgoogle.sh < backup1.ptrtar > files.tar
 
 
 # Of course, we still need a place to put our ptrtar files, they have deduplicated and
@@ -64,16 +68,13 @@ ptrtar to-tar ./downloadencryptedfromS3 < backup1.ptrtar > files.tar
 ```
 
 
-
 # TODO
 
 - worker pool running the upload command.
-- to-tar command
 
 Possibilities:
 
 - ptrtar fuse that lazily downloads pointers to a cache.
-  - Add a PTRTAR.SZ = TrueSize header
 - example of ptrtar pointing into ipfs or bittorrent.
 - contrib scripts, 'garbage collection'
 - contrib script doing backups into git annex

@@ -253,12 +253,14 @@ func CreateMain() {
 			fmt.Fprintf(os.Stderr, "non fatal error opening cache: %s\n", err)
 			cache = nil
 		}
+		defer cache.Close()
 	}
 
 	err = HostToPtrTar(cache, dedupedDirs, exclude, getPtr, os.Stdout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error during archiving: %s\n", err)
-		os.Exit(1)
+		// We need to exit, but save cache state.
+		_ = cache.Close()
 	}
 
 	if cache != nil {
