@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -21,7 +22,35 @@ type ptrTarWorkItem struct {
 	Stat       os.FileInfo
 }
 
-func hostToPtrTar(cache *CreateCache, workList *list.List, exclude map[string]struct{}, ptrFunc func(string, io.Writer) error, tarWriter *tar.Writer) error {
+type MeteredReader struct {
+	R         io.Reader
+	ReadCount int64
+}
+
+func (mRdr *MeteredReader) Read(buf []byte) (int, error) {
+	n, err := mRdr.R.Read(buf)
+	atomic.AddInt64(&mRdr.ReadCount, int64(n))
+	return n, err
+}
+
+func runPtrFunc(fpath string, ptrFunc func(io.Reader, io.Writer) error, out io.Writer) (int64, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	metered := MeteredReader{R: f}
+
+	err = ptrFunc(&metered, out)
+	if err != nil {
+		return 0, err
+	}
+
+	return metered.ReadCount, nil
+}
+
+func hostToPtrTar(cache *CreateCache, workList *list.List, exclude map[string]struct{}, ptrFunc func(io.Reader, io.Writer) error, tarWriter *tar.Writer) error {
 
 	for workList.Len() != 0 {
 
@@ -73,6 +102,7 @@ func hostToPtrTar(cache *CreateCache, workList *list.List, exclude map[string]st
 					if err != nil {
 						return err
 					}
+					tarHeader.PAXRecords["PTRTAR.sz"] = fmt.Sprintf("%d", workItem.Stat.Size())
 				}
 			}
 
@@ -81,13 +111,14 @@ func hostToPtrTar(cache *CreateCache, workList *list.List, exclude map[string]st
 				// it in a /tmp/ file, otherwise just reject large pointers
 				// they don't make sense to me, but maybe they have a use.
 
-				err := ptrFunc(workItem.AbsPath, &ptrBuffer)
+				nCopied, err := runPtrFunc(workItem.AbsPath, ptrFunc, &ptrBuffer)
 				if err != nil {
 					return err
 				}
+				tarHeader.PAXRecords["PTRTAR.sz"] = fmt.Sprintf("%d", nCopied)
 
 				if cache != nil {
-					err = cache.AddPtr(workItem.AbsPath, workItem.Stat.ModTime(), workItemCTime, workItem.Stat.Size(), ptrBuffer.Bytes())
+					err = cache.AddPtr(workItem.AbsPath, workItem.Stat.ModTime(), workItemCTime, nCopied, ptrBuffer.Bytes())
 					if err != nil {
 						return err
 					}
@@ -130,7 +161,7 @@ func hostToPtrTar(cache *CreateCache, workList *list.List, exclude map[string]st
 	return nil
 }
 
-func HostToPtrTar(cache *CreateCache, paths []string, exclude map[string]struct{}, ptrFunc func(string, io.Writer) error, out io.Writer) error {
+func HostToPtrTar(cache *CreateCache, paths []string, exclude map[string]struct{}, ptrFunc func(io.Reader, io.Writer) error, out io.Writer) error {
 
 	workList := list.New()
 
@@ -205,7 +236,7 @@ func CreateMain() {
 		CreateUsage()
 	}
 
-	getPtr := func(fpath string, out io.Writer) error {
+	getPtr := func(in io.Reader, out io.Writer) error {
 		var cmd *exec.Cmd
 		if len(cmdArgs) > 1 {
 			cmd = exec.Command(cmdArgs[0])
@@ -213,15 +244,9 @@ func CreateMain() {
 			cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
 		}
 
-		f, err := os.Open(fpath)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-
 		cmd.Stdout = out
 		cmd.Stderr = os.Stderr
-		cmd.Stdin = f
+		cmd.Stdin = in
 
 		return cmd.Run()
 	}

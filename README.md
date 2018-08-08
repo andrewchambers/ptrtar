@@ -8,10 +8,12 @@ The output tar just a regular tar archive, that can be extracted with tar,
 but the contents of files are user defined strings like URLS. When ptrtar
 extracts the archive it reads this url and delegates fetching to another command.
 
-To tell if a tar header file contains a pointer, it has a PAX header 'PTRTAR.?' = 'y'
+To tell if a tar header file contains a pointer, it has a PAX header 'PTRTAR.sz' = Size
 
-The primary rationale of ptrtar is a directory index format for deduplicated and
-gpg encrypted backups, while preserving the unix spirit of simple composable tools.
+The primary rationale of ptrtar is a directory index format for deduplicated/encrypted
+backups, while preserving the unix spirit of simple composable tools. If you create lots
+of similar ptrtar archives, ptr key can be the same for the same files, save space, even
+after file encryption. The ptrtar archives themselves can be and compressed encrypted too.
 
 examples:
 
@@ -24,7 +26,7 @@ ptrtar create -dir DIR ./uploadtoS3 > files.ptrtar
 ptrtar to-tar ./downloadfromS3 < files.ptrtar > files.tar
 
 # ptrtar -create also supports a caching strategy to avoid rerunning the subcommand
-# for every file.
+# for every file, it makes a dramatic difference.
 
 ptrtar create -cache cache.sqlite  ...
 
@@ -48,3 +50,6 @@ Possibilities:
 - example of ptrtar pointing into ipfs or bittorrent.
 - contrib scripts, 'garbage collection'
 - contrib script doing backups into git annex
+- A separate content chunking tool that can be composed with ptrtar.
+  ptrtar is general enough that you could content chunk the ptrtar archive
+  as well as before you generate the pointers themselves.
