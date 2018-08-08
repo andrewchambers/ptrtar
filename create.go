@@ -3,16 +3,16 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"container/list"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
-	// "time"
-	// "syscall"
-	"container/list"
-	"io/ioutil"
 	"path/filepath"
+	"syscall"
+	"time"
 )
 
 type ptrTarWorkItem struct {
@@ -21,13 +21,13 @@ type ptrTarWorkItem struct {
 	Stat       os.FileInfo
 }
 
-func hostToPtrTar(workList *list.List, exclude map[string]struct{}, ptrFunc func(string, io.Writer) error, tarWriter *tar.Writer) error {
+func hostToPtrTar(cache *CreateCache, workList *list.List, exclude map[string]struct{}, ptrFunc func(string, io.Writer) error, tarWriter *tar.Writer) error {
 
 	for workList.Len() != 0 {
 
 		workItem := workList.Remove(workList.Front()).(ptrTarWorkItem)
-		// workItemSysStat := workItem.Stat.Sys().(*syscall.Stat_t)
-		// workItemCTime := time.Unix(int64(workItemSysStat.Ctim.Sec), int64(workItemSysStat.Ctim.Nsec))
+		workItemSysStat := workItem.Stat.Sys().(*syscall.Stat_t)
+		workItemCTime := time.Unix(int64(workItemSysStat.Ctim.Sec), int64(workItemSysStat.Ctim.Nsec))
 
 		_, doExclude := exclude[workItem.AbsPath]
 		if doExclude {
@@ -58,13 +58,40 @@ func hostToPtrTar(workList *list.List, exclude map[string]struct{}, ptrFunc func
 			isPtr = true
 			tarHeader.PAXRecords = make(map[string]string)
 			tarHeader.PAXRecords["PTRTAR.?"] = "y"
-			// XXX, perhaps if the pointer starts getting huge, buffer
-			// it in a /tmp/ file, otherwise just reject large pointers
-			// they don't make sense to me, but maybe they have a use.
 
-			err := ptrFunc(workItem.AbsPath, &ptrBuffer)
-			if err != nil {
-				return err
+			cacheHit := false
+
+			if cache != nil {
+				cachedPtr, ok, err := cache.HasPtr(workItem.AbsPath, workItem.Stat.ModTime(), workItemCTime, workItem.Stat.Size())
+				if err != nil {
+					return err
+				}
+
+				if ok {
+					cacheHit = true
+					_, err = ptrBuffer.Write(cachedPtr)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			if !cacheHit {
+				// XXX, perhaps if the pointer starts getting huge, buffer
+				// it in a /tmp/ file, otherwise just reject large pointers
+				// they don't make sense to me, but maybe they have a use.
+
+				err := ptrFunc(workItem.AbsPath, &ptrBuffer)
+				if err != nil {
+					return err
+				}
+
+				if cache != nil {
+					err = cache.AddPtr(workItem.AbsPath, workItem.Stat.ModTime(), workItemCTime, workItem.Stat.Size(), ptrBuffer.Bytes())
+					if err != nil {
+						return err
+					}
+				}
 			}
 
 		case workItem.Stat.IsDir():
@@ -103,7 +130,7 @@ func hostToPtrTar(workList *list.List, exclude map[string]struct{}, ptrFunc func
 	return nil
 }
 
-func HostToPtrTar(paths []string, exclude map[string]struct{}, ptrFunc func(string, io.Writer) error, out io.Writer) error {
+func HostToPtrTar(cache *CreateCache, paths []string, exclude map[string]struct{}, ptrFunc func(string, io.Writer) error, out io.Writer) error {
 
 	workList := list.New()
 
@@ -137,7 +164,7 @@ func HostToPtrTar(paths []string, exclude map[string]struct{}, ptrFunc func(stri
 
 	tarWriter := tar.NewWriter(out)
 
-	err := hostToPtrTar(workList, absExclude, ptrFunc, tarWriter)
+	err := hostToPtrTar(cache, workList, absExclude, ptrFunc, tarWriter)
 	if err != nil {
 		return err
 	}
@@ -166,6 +193,7 @@ func CreateMain() {
 	flag.Usage = CreateUsage
 	exclude := make(stringSet)
 	dirs := make(stringSet)
+	cachePath := flag.String("cache", "", "path to write cache, (cache invalidation via rm is up to you!)")
 	flag.Var(&exclude, "exclude", "paths to exclude from archive, can be specified multiple times")
 	flag.Var(&dirs, "dir", "dir to archive, can be specified multiple times")
 
@@ -203,9 +231,27 @@ func CreateMain() {
 		dedupedDirs = append(dedupedDirs, d)
 	}
 
-	err := HostToPtrTar(dedupedDirs, exclude, getPtr, os.Stdout)
+	var cache *CreateCache
+	var err error
+
+	if *cachePath != "" {
+		cache, err = OpenCache(*cachePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "non fatal error opening cache: %s\n", err)
+			cache = nil
+		}
+	}
+
+	err = HostToPtrTar(cache, dedupedDirs, exclude, getPtr, os.Stdout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error during archiving: %s\n", err)
 		os.Exit(1)
+	}
+
+	if cache != nil {
+		err = cache.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "non fatal error closing cache: %s\n", err)
+		}
 	}
 }
