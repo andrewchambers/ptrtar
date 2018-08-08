@@ -12,7 +12,7 @@ To tell if a tar header file contains a pointer, it has a PAX header 'PTRTAR.sz'
 
 The primary rationale of ptrtar is a directory index format for deduplicated/encrypted
 backups, while preserving the unix spirit of simple composable tools. If you create lots
-of similar ptrtar archives, ptr key can be the same for the same files, save space, even
+of similar ptrtar archives, ptr can be the same for the same files, and therefore save space, even
 after file encryption. The ptrtar archives themselves can be and compressed encrypted too.
 
 walkthrough:
