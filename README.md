@@ -34,4 +34,3 @@ ptrtar create -create-cache db.ptrtarcache  ...
 ptrtar print-ptrs < files.tar
 ```
 
-This tool is free and open source, but development was sponsored by https://backupbox.io
