@@ -25,6 +25,9 @@ func main() {
 	case "to-tar":
 		os.Args = os.Args[1:]
 		ToTarMain()
+	case "list-ptrs":
+		os.Args = os.Args[1:]
+		ListPtrsMain()
 	default:
 		Usage()
 	}

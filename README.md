@@ -8,32 +8,59 @@ The output tar just a regular tar archive, that can be extracted with tar,
 but the contents of files are user defined strings like URLS. When ptrtar
 extracts the archive it reads this url and delegates fetching to another command.
 
-To tell if a tar header file contains a pointer, it has a PAX header 'PTRTAR.sz' = Size
+To tell if a tar header file contains a pointer, it has a PAX header 'PTRTAR.sz' = TrueSize
 
 The primary rationale of ptrtar is a directory index format for deduplicated/encrypted
 backups, while preserving the unix spirit of simple composable tools. If you create lots
 of similar ptrtar archives, ptr key can be the same for the same files, save space, even
 after file encryption. The ptrtar archives themselves can be and compressed encrypted too.
 
-examples:
+walkthrough:
 
 ```
-# imagine you have two scripts, uploadtoS3 and downloadfromS3.
-# upload reads the file contents from stdin and prints a url to stdout.
-# download takes a url from stdin and prints the file contents.
+# consider the example scripts, uploadencryptedtoS3 and downloadencryptedfromS3
+# upload reads the file contents from stdin. encrypts it, uploads the data
+# and prints a url to stdout.
+echo hello | ./examples/uploadtoS3
+$ s3://somebucket/someobject
 
-ptrtar create -dir DIR ./uploadtoS3 > files.ptrtar
-ptrtar to-tar ./downloadfromS3 < files.ptrtar > files.tar
+# download takes a url from stdin, decrypts it, and prints the file contents.
+$ echo s3://somebucket/someobject | ./examples/downloadfromS3
+hello
 
-# ptrtar -create also supports a caching strategy to avoid rerunning the subcommand
-# for every file, it makes a dramatic difference.
+# now combining it with ptrtar create, we can encrypt our files them and upload
+# them to s3.
 
-ptrtar create -cache cache.sqlite  ...
+ptrtar create -dir DIR ./uploadencryptedtoS3 > files.ptrtar
 
-# print all pointers in an archive, this is useful if we want to gather unused data
-# from s3 (or wherever) and delete it. We could list an s3 bucket, compare all the files, then delete
-# ones not used by our archives.
-ptrtar print-ptrs < files.ptrtar
+# its a bit slow though, that sucks.
+# we can use a cache file, that remembers the url of files we uploaded, 
+# the cache is just an sqlite3 database remembering full path, modified time, and file size
+# so future archives don't need to reupload if the file didn't change.
+
+# first backup is slow.
+$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./uploadencryptedtoS3 | gzip > backup1.ptrtar.gz
+
+# second backup is hella fast, hell yeah!
+# only new files and changed files are reencrypted and uploaded
+$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./uploadencryptedtoS3 > gzip > backup1.ptrtar.gz
+
+# if we want to to see what pointers, or in this case, s3 urls a ptrtar contains
+# just run list-ptrs
+gunzip < backup1.ptrtar.gz | ptrtar list-ptrs
+
+# we could even see what changed across our archives
+
+diff <(gunzip < backup1.ptrtar.gz | ptrtar list-ptrs) <(gunzip < backup2.ptrtar.gz | ptrtar list-ptrs)
+
+# lets convert our ptr tar back to a regular tar file so we 
+# can extract it.
+ptrtar to-tar ./downloadencryptedfromS3 < backup1.ptrtar > files.tar
+
+
+# Of course, we still need a place to put our ptrtar files, they have deduplicated and
+# speed up our backup process, but we still should encrypt the ptrtar files themselves
+# and upload them along side the data objects.
 ```
 
 

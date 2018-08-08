@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -20,17 +19,6 @@ type ptrTarWorkItem struct {
 	AbsPath    string
 	PassedPath string
 	Stat       os.FileInfo
-}
-
-type MeteredReader struct {
-	R         io.Reader
-	ReadCount int64
-}
-
-func (mRdr *MeteredReader) Read(buf []byte) (int, error) {
-	n, err := mRdr.R.Read(buf)
-	atomic.AddInt64(&mRdr.ReadCount, int64(n))
-	return n, err
 }
 
 func runPtrFunc(fpath string, ptrFunc func(io.Reader, io.Writer) error, out io.Writer) (int64, error) {
@@ -86,7 +74,6 @@ func hostToPtrTar(cache *CreateCache, workList *list.List, exclude map[string]st
 		case workItem.Stat.Mode().IsRegular():
 			isPtr = true
 			tarHeader.PAXRecords = make(map[string]string)
-			tarHeader.PAXRecords["PTRTAR.?"] = "y"
 
 			cacheHit := false
 
@@ -238,7 +225,7 @@ func CreateMain() {
 
 	getPtr := func(in io.Reader, out io.Writer) error {
 		var cmd *exec.Cmd
-		if len(cmdArgs) > 1 {
+		if len(cmdArgs) == 1 {
 			cmd = exec.Command(cmdArgs[0])
 		} else {
 			cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
