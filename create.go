@@ -235,6 +235,7 @@ func CreateMain() {
 	var err error
 
 	if *cachePath != "" {
+		exclude.Set(*cachePath)
 		cache, err = OpenCache(*cachePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "non fatal error opening cache: %s\n", err)
