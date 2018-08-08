@@ -38,6 +38,9 @@ hello
 
 $ ptrtar create -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > files.ptrtar
 
+# remember, a ptrtar archive is just a tar archive, regular tar can extract it, just
+# your file data is replaced with your pointers! (tar will also mention some unknown metadata).
+
 # its a bit slow though, that sucks.
 # we can use a cache file, that remembers the url of files we uploaded, 
 # the cache is just an sqlite3 database remembering full path, modified time, and file size
