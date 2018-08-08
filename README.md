@@ -12,10 +12,10 @@ To tell if a tar header file contains a pointer, it has a PAX header 'PTRTAR.sz'
 
 The primary rationale of ptrtar is a directory index format for deduplicated/encrypted
 backups, while preserving the unix spirit of simple composable tools. If you create lots
-of similar ptrtar archives, ptr can be the same for the same files, and therefore save space, even
-after file encryption. The ptrtar archives themselves can be and compressed encrypted too.
+of similar ptrtar archives, the pointer can be the same for the same files, and therefore save space, even
+after file encryption. The ptrtar archives themselves can be compressed and encrypted too.
 
-walkthrough:
+walkthrough, gpg encrypted backups into google cloud:
 
 ```
 # consider the example scripts, uploadencryptedtogoogle and downloadencryptedfromgoogle
@@ -58,8 +58,7 @@ gunzip < backup1.ptrtar | ptrtar list-ptrs
 # this is actually quite easy with some bash foo...
 # this command lists all objects in the bucket, also
 # all objects in the ptrtar, finds the difference, 
-# then deletes them all.
-# then 
+# then deletes those we don't need anymore (I love bash sometimes).
 comm -23 <(gsutil ls) <(ptrtar list-ptrs < backup2.gz | sort) | gsutil rm -I
 
 # we can convert our ptrtar back to a regular tar file to make sure
@@ -69,6 +68,8 @@ ptrtar to-tar ./example/downloadencryptedfromgoogle.sh < backup2.ptrtar > files.
 # Of course, we still need a place to put our ptrtar files, they have deduplicated and
 # speed up our backup process, but we still should encrypt the ptrtar files themselves
 # and upload them along side the data objects.
+
+gzip < backup2.ptrtar | gpg --encrypt -r $gpgid | gsutil cp - $bucket/backups.ptrtar.gz.enc
 ```
 
 
