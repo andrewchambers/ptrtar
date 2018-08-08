@@ -29,13 +29,14 @@ $ echo hello | ./example/uploadencryptedtogoogle.sh $bucket $gpgid
 gs://mytopsecretbucket/f572d396fae9206628714fb2ce00f72e94f2258f
 
 # download takes a url from stdin, decrypts it, and prints the file contents.
+
 $ echo gs://mytopsecretbucket/f572d396fae9206628714fb2ce00f72e94f2258f | ./example/downloadfromgoogle.sh
 hello
 
-# now combining it with ptrtar create, we can encrypt our files them and upload
+# now combining it with ptrtar create, we can encrypt our files and securely upload
 # them to google.
 
-ptrtar create -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > files.ptrtar
+$ ptrtar create -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > files.ptrtar
 
 # its a bit slow though, that sucks.
 # we can use a cache file, that remembers the url of files we uploaded, 
@@ -43,15 +44,25 @@ ptrtar create -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > fil
 # so future archives don't need to reupload if the file didn't change.
 
 # first backup is slow.
-$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > backup1.ptrtar
+
+$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $ gpgid > backup1.ptrtar
 
 # second backup is hella fast, hell yeah!
 # only new files and changed files are reencrypted and uploaded
-$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > backup2.ptrtar
+# Yet the backup is a full snapshot, the cache
+# gave us extremely efficient snapshots!
 
-# if we want to to see what pointers, or in this case, s3 urls a ptrtar contains
+$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $ gpgid > backup2.ptrtar
+
+# if we want to to see what pointers, or in this case, google urls a ptrtar contains
 # just run list-ptrs
-gunzip < backup1.ptrtar | ptrtar list-ptrs
+
+$ ptrtar list-ptrs < backup1.ptrtar 
+gs://mytopsecretbucket/f40dc2ae20adb3883d3e0eda2fde0961243f8132
+.
+.
+.
+gs://mytopsecretbucket/fe39f64560a2514fc03aeb6e833405b2729ce751
 
 # if we remove backup1.ptrtar, we should also remove
 # the unused objects from google cloud storage.
@@ -59,17 +70,27 @@ gunzip < backup1.ptrtar | ptrtar list-ptrs
 # this command lists all objects in the bucket, also
 # all objects in the ptrtar, finds the difference, 
 # then deletes those we don't need anymore (I love bash sometimes).
-comm -23 <(gsutil ls) <(ptrtar list-ptrs < backup2.gz | sort) | gsutil rm -I
+
+$ comm -23 <(gsutil ls | sort) <(ptrtar list-ptrs < backup2.ptrtar | sort) | gsutil rm -I
 
 # we can convert our ptrtar back to a regular tar file to make sure
 # we still have our all our data...
-ptrtar to-tar ./example/downloadencryptedfromgoogle.sh < backup2.ptrtar > files.tar
+
+$ ptrtar to-tar ./example/downloadencryptedfromgoogle.sh < backup2.ptrtar > files.tar
 
 # Of course, we still need a place to put our ptrtar files, they have deduplicated and
 # speed up our backup process, but we still should encrypt the ptrtar files themselves
 # and upload them along side the data objects.
 
-gzip < backup2.ptrtar | gpg --encrypt -r $gpgid | gsutil cp - $bucket/backups.ptrtar.gz.enc
+$ gzip < backup2.ptrtar | gpg --encrypt -r $gpgid | gsutil cp - $bucket/backups.ptrtar.gz.enc
+
+# One difficulty is if you delete your files, you must invalidate your backup cache files, 
+# or else your new archives may point to data you already deleted.
+
+$ rm /tmp/ptrtar.cache
+
+# In this sense, ptrtar is a very low level tool, but I'm sure higher level tools and scripts
+# could use it, or it's code as a building block.
 ```
 
 
