@@ -34,3 +34,10 @@ ptrtar create -create-cache db.ptrtarcache  ...
 ptrtar print-ptrs < files.tar
 ```
 
+
+
+# TODO
+
+- worker pool running the upload command.
+- example of ptrtar pointing into ipfs or bittorrent.
+- contrib scripts, 'garbage collection'
