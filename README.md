@@ -43,24 +43,28 @@ ptrtar create -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > fil
 # so future archives don't need to reupload if the file didn't change.
 
 # first backup is slow.
-$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid | gzip > backup1.ptrtar.gz
+$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > backup1.ptrtar
 
 # second backup is hella fast, hell yeah!
 # only new files and changed files are reencrypted and uploaded
-$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > gzip > backup1.ptrtar.gz
+$ ptrtar create -cache /tmp/ptrtar.cache -dir DIR ./example/uploadencryptedtogoogle.sh $bucket $gpgid > backup2.ptrtar
 
 # if we want to to see what pointers, or in this case, s3 urls a ptrtar contains
 # just run list-ptrs
-gunzip < backup1.ptrtar.gz | ptrtar list-ptrs
+gunzip < backup1.ptrtar | ptrtar list-ptrs
 
-# we could even see what changed across our archives
+# if we remove backup1.ptrtar, we should also remove
+# the unused objects from google cloud storage.
+# this is actually quite easy with some bash foo...
+# this command lists all objects in the bucket, also
+# all objects in the ptrtar, finds the difference, 
+# then deletes them all.
+# then 
+comm -23 <(gsutil ls) <(ptrtar list-ptrs < backup2.gz | sort) | gsutil rm -I
 
-diff <(gunzip < backup1.ptrtar.gz | ptrtar list-ptrs) <(gunzip < backup2.ptrtar.gz | ptrtar list-ptrs)
-
-# lets convert our ptr tar back to a regular tar file so we 
-# can extract it.
-ptrtar to-tar ./example/downloadencryptedfromgoogle.sh < backup1.ptrtar > files.tar
-
+# we can convert our ptrtar back to a regular tar file to make sure
+# we still have our all our data...
+ptrtar to-tar ./example/downloadencryptedfromgoogle.sh < backup2.ptrtar > files.tar
 
 # Of course, we still need a place to put our ptrtar files, they have deduplicated and
 # speed up our backup process, but we still should encrypt the ptrtar files themselves
