@@ -1,0 +1,211 @@
+package main
+
+import (
+	"archive/tar"
+	"bytes"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	// "time"
+	// "syscall"
+	"container/list"
+	"io/ioutil"
+	"path/filepath"
+)
+
+type ptrTarWorkItem struct {
+	AbsPath    string
+	PassedPath string
+	Stat       os.FileInfo
+}
+
+func hostToPtrTar(workList *list.List, exclude map[string]struct{}, ptrFunc func(string, io.Writer) error, tarWriter *tar.Writer) error {
+
+	for workList.Len() != 0 {
+
+		workItem := workList.Remove(workList.Front()).(ptrTarWorkItem)
+		// workItemSysStat := workItem.Stat.Sys().(*syscall.Stat_t)
+		// workItemCTime := time.Unix(int64(workItemSysStat.Ctim.Sec), int64(workItemSysStat.Ctim.Nsec))
+
+		_, doExclude := exclude[workItem.AbsPath]
+		if doExclude {
+			continue
+		}
+
+		linkTarget := ""
+		if (workItem.Stat.Mode() & os.ModeSymlink) != 0 {
+			target, err := os.Readlink(workItem.AbsPath)
+			if err != nil {
+				return err
+			}
+			linkTarget = target
+		}
+
+		tarHeader, err := tar.FileInfoHeader(workItem.Stat, linkTarget)
+		if err != nil {
+			return err
+		}
+
+		tarHeader.Name = workItem.PassedPath
+
+		var ptrBuffer bytes.Buffer
+		isPtr := false
+
+		switch {
+		case workItem.Stat.Mode().IsRegular():
+			isPtr = true
+			tarHeader.PAXRecords = make(map[string]string)
+			tarHeader.PAXRecords["PTRTAR.?"] = "y"
+			// XXX, perhaps if the pointer starts getting huge, buffer
+			// it in a /tmp/ file, otherwise just reject large pointers
+			// they don't make sense to me, but maybe they have a use.
+
+			err := ptrFunc(workItem.AbsPath, &ptrBuffer)
+			if err != nil {
+				return err
+			}
+
+		case workItem.Stat.IsDir():
+			dir, err := ioutil.ReadDir(workItem.AbsPath)
+			if err != nil {
+				return err
+			}
+
+			for _, st := range dir {
+				workList.PushFront(ptrTarWorkItem{
+					PassedPath: filepath.Join(workItem.PassedPath, st.Name()),
+					AbsPath:    filepath.Join(workItem.AbsPath, st.Name()),
+					Stat:       st,
+				})
+			}
+		}
+
+		if isPtr {
+			tarHeader.Size = int64(ptrBuffer.Len())
+		}
+
+		err = tarWriter.WriteHeader(tarHeader)
+		if err != nil {
+			return err
+		}
+
+		if isPtr {
+			_, err = io.Copy(tarWriter, &ptrBuffer)
+			if err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func HostToPtrTar(paths []string, exclude map[string]struct{}, ptrFunc func(string, io.Writer) error, out io.Writer) error {
+
+	workList := list.New()
+
+	for _, path := range paths {
+
+		st, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+
+		workList.PushFront(ptrTarWorkItem{
+			AbsPath:    abs,
+			PassedPath: path,
+			Stat:       st,
+		})
+	}
+
+	absExclude := make(map[string]struct{})
+	for ex := range exclude {
+		abs, err := filepath.Abs(ex)
+		if err != nil {
+			return err
+		}
+		absExclude[abs] = struct{}{}
+	}
+
+	tarWriter := tar.NewWriter(out)
+
+	err := hostToPtrTar(workList, absExclude, ptrFunc, tarWriter)
+	if err != nil {
+		return err
+	}
+
+	return tarWriter.Close()
+}
+
+func CreateUsage() {
+	fmt.Println("TODO")
+	flag.PrintDefaults()
+	os.Exit(1)
+}
+
+type stringSet map[string]struct{}
+
+func (e *stringSet) String() string {
+	return fmt.Sprintf("%v", map[string]struct{}(*e))
+}
+
+func (e *stringSet) Set(value string) error {
+	(*e)[value] = struct{}{}
+	return nil
+}
+
+func CreateMain() {
+	flag.Usage = CreateUsage
+	exclude := make(stringSet)
+	dirs := make(stringSet)
+	flag.Var(&exclude, "exclude", "paths to exclude from archive, can be specified multiple times")
+	flag.Var(&dirs, "dir", "dir to archive, can be specified multiple times")
+
+	flag.Parse()
+
+	cmdArgs := flag.Args()
+	if len(cmdArgs) == 0 {
+		fmt.Fprintln(os.Stderr, "You didn't specify a command...\n")
+		CreateUsage()
+	}
+
+	getPtr := func(fpath string, out io.Writer) error {
+		var cmd *exec.Cmd
+		if len(cmdArgs) > 1 {
+			cmd = exec.Command(cmdArgs[0])
+		} else {
+			cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		}
+
+		f, err := os.Open(fpath)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		cmd.Stdout = out
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = f
+
+		return cmd.Run()
+	}
+
+	var dedupedDirs []string
+	for d, _ := range dirs {
+		dedupedDirs = append(dedupedDirs, d)
+	}
+
+	err := HostToPtrTar(dedupedDirs, exclude, getPtr, os.Stdout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error during archiving: %s\n", err)
+		os.Exit(1)
+	}
+}
