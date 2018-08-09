@@ -107,7 +107,10 @@ $ rm /tmp/ptrtar.cache
 
 ## likely:
 
-- A spec/header for nesting ptrtars such that they can be flattened.
+- A spec+header for nesting ptrtars
+  - option create -nest
+  - make to-tar understand nesting.
+  - make ptr-list understand nesting.
 
 ## possible:
 
