@@ -99,13 +99,19 @@ $ rm /tmp/ptrtar.cache
 
 # TODO
 
+## definitely:
+
 - worker pool running the upload command.
 - embed a "multihash" with each ptr so the contents can
   be verified.
 
-Possibilities:
+## likely:
 
 - A spec/header for nesting ptrtars such that they can be flattened.
+
+## possible:
+
+
 - ptrtar fuse that lazily downloads pointers to a cache.
 - example of ptrtar pointing into ipfs or bittorrent.
 - contrib scripts, 'garbage collection'
