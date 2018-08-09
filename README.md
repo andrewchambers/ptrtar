@@ -6,7 +6,7 @@ actually means is delegated to a user supplied command.
 
 The output tar just a regular tar archive, that can be extracted with tar,
 but the contents of files are user defined strings like URLS. When ptrtar
-extracts the archive it reads this url and delegates fetching to another command.
+extracts the archive it reads this pointer(say, a url) and delegates fetching to another command.
 
 To tell if a tar header file contains a pointer, it has a PAX header 'PTRTAR.sz' = TrueSize
 
