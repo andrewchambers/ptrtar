@@ -109,8 +109,11 @@ $ rm /tmp/ptrtar.cache
 
 - A spec+header for nesting ptrtars
   - option create -nest
-  - make to-tar understand nesting.
-  - make ptr-list understand nesting.
+  - make to-tar understand nesting
+  - make ptr-list understand nesting
+
+- A separate content chunking tool that can be composed with ptrtar based
+  off of parts of restic chunker.
 
 ## possible:
 
@@ -119,6 +122,4 @@ $ rm /tmp/ptrtar.cache
 - example of ptrtar pointing into ipfs or bittorrent.
 - contrib scripts, 'garbage collection'
 - contrib script doing backups into git annex
-- A separate content chunking tool that can be composed with ptrtar.
-  ptrtar is general enough that you could content chunk the ptrtar archive
-  as well as before you generate the pointers themselves.
+
