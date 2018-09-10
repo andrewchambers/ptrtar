@@ -117,9 +117,7 @@ $ rm /tmp/ptrtar.cache
 
 ## possible:
 
-
 - ptrtar fuse that lazily downloads pointers to a cache.
 - example of ptrtar pointing into ipfs or bittorrent.
-- contrib scripts, 'garbage collection'
-- contrib script doing backups into git annex
+- a backup tool that that uses nested ptrtars and content chunking
 
